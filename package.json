@@ -1,7 +1,7 @@
 {
   "name": "elliptical-template",
   "description": "Real-time dustjs MVC template provider",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "author": "S. Francis",
   "license": "MIT",
   "repository": {
@@ -10,6 +10,7 @@
   },
   "dependencies":{
     "elliptical-utils":"git+https://github.com/ellipticaljs/utils.git",
+    "jquery-extensions": "git+https://github.com/ellipticaljs/jquery-extensions.git",
     "dustjs":"git+https://github.com/ellipticaljs/dustjs.git",
     "elliptical-dust-helpers":"git+https://github.com/ellipticaljs/dust-helpers.git",
     "elliptical-class":"git+https://github.com/ellipticaljs/class.git"
