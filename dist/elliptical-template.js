@@ -38,7 +38,7 @@
 
     /**
      * onLoad fired when template not found
-     * if we have a "." in the template name, we look for the html file in the views directory
+     * if we have a "." in the template name, we look for the html file in the app views directory
      * dots compose the hierarchical location within the directory tree. E.g, "home.index" --> /view/home/index.html
      * @param {string} template -the template name
      * @param {function} callback
@@ -132,7 +132,7 @@
         getBase: function () {
             return (network.isBrowser()) ? this.base.client : this.base.server;
         },
-        
+
         setRoot:function(val){
             this.root=val;
             this._root=val;
@@ -141,6 +141,11 @@
 
 
         /**
+         * renders a template
+         *  if template not already in the object cache, render will either:
+         *  (i) check if template param is an object, if so, it will attempt to render html document located according to MVC Controller/View convention
+         *  (ii) render html document using dot notation to infer folder location
+         *  (iii) atempt to render by string name from an external store provider
          *
          * @param {string} template
          * @param {object} context
@@ -153,32 +158,10 @@
             var isEmpty=false;
             if(cache) isEmpty=object.isEmpty(cache);
             else isEmpty=true;
-            if(!isEmpty){
-                if (cache[template] !== undefined) {
-                    $provider.render(template, context, callback);
-                    return;
-                }
-            }
-            if (typeof template === 'object') {
-                var ctrlName = template.name.toLowerCase();
-                var ctrlView = template.view.toLowerCase();
-                var ctrlTemplate = ctrlName + '.' + ctrlView;
-                if (!isEmpty) {
-                    if (cache[ctrlTemplate]) $provider.render(ctrlTemplate, context, callback);
-                    else loadTemplateFromControllerView(this, ctrlName, ctrlView, context, callback);
-                } else {
-                    loadTemplateFromControllerView(this, ctrlName, ctrlView, context, callback);
-                }
-            } else {
-                if (template.indexOf('.') > -1) {
-                    loadTemplateFromViewsFolder($provider, template, function () {
-                        $provider.render(template, context, callback);
-                    });
-                } else {
-                    loadTemplateByStringValue(this, template, context, callback);
-                }
-            }
-
+            if(!isEmpty && cache[template !==undefined]) $provider.render(template, context, callback);
+            else if(typeof template==='object') this._renderTemplateObjectByControllerView(isEmpty,template,context,callback);
+            else if(template.indexOf('.') > -1) this._renderTemplateByPathDotHierarchy(template,context,callback);
+            else loadTemplateByStringValue(this, template, context, callback);
         },
 
         /**
@@ -189,6 +172,38 @@
          */
         setBrowserGlobal: function () {
             if (typeof window != 'undefined') window.dust = this.$provider;
+        },
+
+        _renderTemplateObjectByControllerView:function(isEmptyCache,template,context,callback){
+            var $provider = this.$provider;
+            var cache = $provider.cache;
+            var ctrlName = template.name.toLowerCase();
+            var ctrlView = template.view.toLowerCase();
+            var ctrlTemplate = ctrlName + '.' + ctrlView;
+            if (!isEmptyCache) {
+                if (cache[ctrlTemplate]) $provider.render(ctrlTemplate, context, callback);
+                else loadTemplateFromControllerView(this, ctrlName, ctrlView, context, callback);
+            } else {
+                loadTemplateFromControllerView(this, ctrlName, ctrlView, context, callback);
+            }
+        },
+
+        _renderTemplateByPathDotHierarchy:function(template,context,callback){
+            var self=this;
+            var $provider = this.$provider;
+            loadTemplateFromViewsFolder($provider, template, function (err,data) {
+                if(!err) $provider.render(template, context, callback);
+                else self._onRenderError(template,context,callback);
+            });
+        },
+
+
+        _onRenderError:function(template,context,callback){
+            var $provider = this.$provider;
+            loadTemplateFromFolder($provider,template,function(err,data){
+                if(!err) $provider.render(template, context, callback);
+                else throw new Error(err);
+            });
         }
 
     }, {
@@ -222,8 +237,12 @@
         }
     });
 
-    function getUrlPath($provider, template) {
+    function getSanitizedUrlPath($provider,template){
         var url = sanitizeFolder($provider._root);
+        return getUrlPath(url,template);
+    }
+
+    function getUrlPath(url, template) {
         var arr = template.split('.');
         for (var i = 0; i < arr.length; i++) {
             url += '/' + arr[i];
@@ -232,19 +251,27 @@
         return url;
     }
 
-    function loadTemplateFromViewsFolder($provider, template, callback) {
-        var url = getUrlPath($provider, template);
-        $.get(url, function (data) {
-            if (data) {
+    function getRequest(url,$provider,template,callback){
+        $.get(url)
+            .done(function(data){
                 var compiled = $provider.compile(data, template);
                 $provider.loadSource(compiled);
                 callback(null, data);
-            } else {
+            })
+            .fail(function(){
                 callback(new Error('Error: cannot find ' + template + ' in views folder'), null);
-            }
-        });
+            })
     }
 
+    function loadTemplateFromViewsFolder($provider, template, callback) {
+        var url = getSanitizedUrlPath($provider, template);
+        getRequest(url,$provider,template,callback);
+    }
+
+    function loadTemplateFromFolder($provider, template, callback) {
+        var url = getUrlPath('', template);
+        getRequest(url,$provider,template,callback);
+    }
 
     function loadTemplateFromControllerView(thisRef, ctrl, view, context, callback) {
         var root = sanitizeFolder(thisRef.root);
@@ -257,7 +284,7 @@
                 $provider.loadSource(compiled);
                 $provider.render(ctrlTemplate, context, callback);
             } else {
-                callback('Error: Controller View does not exist', null);
+                callback(new Error('Error: Controller View does not exist'), null);
             }
         });
 
