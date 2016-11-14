@@ -1,7 +1,7 @@
 {
   "name": "elliptical-template",
   "description": "Real-time dustjs MVC template provider",
-  "version": "1.0.14",
+  "version": "1.0.15",
   "main": "dist/elliptical-template.js",
   "authors": [
     "S. Francis"
